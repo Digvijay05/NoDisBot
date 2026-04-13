@@ -1,31 +1,47 @@
-# For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3.8-slim-buster
+FROM python:3.8-slim AS builder
 
-# Keeps Python from generating .pyc files in the container
-ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Turns off buffering for easier container logging
-ENV PYTHONUNBUFFERED=1
+WORKDIR /build
 
-# Install pip requirements
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y build-essential gcc \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
-RUN apt-get update
-RUN apt-get install python-dev -y
-RUN apt-get install build-essential -y
-RUN python -m pip install -r requirements.txt
 
-RUN mkdir /Bot
-WORKDIR /Bot
-RUN mkdir database
-COPY ./Bot /Bot
-
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
-# For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 5678 --disabled-password --gecos "" appuser
-RUN chown -R appuser /Bot
-RUN chown -R appuser /Bot/database
-USER root
+RUN pip install --upgrade pip wheel \
+    && pip wheel --wheel-dir /wheels -r requirements.txt
 
 
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-CMD ["python", "bot.py"]
+FROM python:3.8-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DATA_DIR=/app/data
+
+WORKDIR /app
+
+RUN addgroup --system appgroup \
+    && adduser --system --ingroup appgroup --home /app appuser \
+    && mkdir -p /app/data /app/scripts
+
+COPY --from=builder /wheels /wheels
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
+    && rm -rf /wheels
+
+COPY Bot ./Bot
+COPY scripts/render-entrypoint.sh ./scripts/render-entrypoint.sh
+
+RUN chmod 755 /app/scripts/render-entrypoint.sh \
+    && chown -R appuser:appgroup /app
+
+USER appuser
+
+ENTRYPOINT ["/app/scripts/render-entrypoint.sh"]
+CMD ["python", "-u", "Bot/bot.py"]

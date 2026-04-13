@@ -1,15 +1,19 @@
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-import datetime
 import os
 
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
-# run openssl rand -hex 32
-# get key from dotenv
-SECRET_KEY = os.getenv("SECRET_KEY")
+
 ALGORITHM = "HS256"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _get_secret_key():
+    secret_key = os.getenv("SECRET_KEY")
+    if not secret_key:
+        raise RuntimeError("SECRET_KEY environment variable is required")
+    return secret_key
 
 def encrypt(key):
     """
@@ -20,7 +24,7 @@ def encrypt(key):
     payload = {
         "sub": key,
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, _get_secret_key(), algorithm=ALGORITHM)
 
 def getKey(token):
     """
@@ -29,7 +33,7 @@ def getKey(token):
     :return:
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, _get_secret_key(), algorithms=[ALGORITHM])
     except JWTError:
         return None
     return payload.get("sub")

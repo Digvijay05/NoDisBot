@@ -2,10 +2,63 @@ import asyncio
 import discord
 from discord.ext import commands
 
-from functionality.config import get_bot_config, save_assignee_mapping
-from functionality.notion_schema import validate_schema
+from functionality.config import get_bot_config, save_assignee_mapping, resolve_assignee_mapping
+from functionality.notion_schema import async_validate_schema
 from functionality.notion_tasks import create_task, update_task, search_tasks, archive_task
 from functionality.task_parser import parse_task_request
+from functionality.task_resolution import resolve_task_candidates
+
+
+def _extract_property_value(task: dict, internal_key: str, resolved_schema: dict) -> str:
+    """Extract a human-readable current value from a Notion task's properties.
+
+    Used to build before/after diffs for update confirmations.
+    """
+    props = task.get("properties", {})
+    schema_entry = resolved_schema.get(internal_key)
+    if not schema_entry:
+        return None
+
+    notion_name = schema_entry["name"]
+    prop = props.get(notion_name)
+    if not prop:
+        return None
+
+    ptype = prop.get("type", "")
+
+    if ptype == "title":
+        arr = prop.get("title", [])
+        return arr[0].get("text", {}).get("content", "") if arr else ""
+
+    elif ptype == "rich_text":
+        arr = prop.get("rich_text", [])
+        return arr[0].get("text", {}).get("content", "") if arr else ""
+
+    elif ptype == "status":
+        s = prop.get("status")
+        return s.get("name", "") if s else ""
+
+    elif ptype == "select":
+        s = prop.get("select")
+        return s.get("name", "") if s else ""
+
+    elif ptype == "multi_select":
+        items = prop.get("multi_select", [])
+        return ", ".join(i.get("name", "") for i in items) if items else ""
+
+    elif ptype == "date":
+        d = prop.get("date")
+        return d.get("start", "") if d else ""
+
+    elif ptype == "people":
+        people = prop.get("people", [])
+        return ", ".join(p.get("name", p.get("id", "")) for p in people) if people else ""
+
+    elif ptype == "checkbox":
+        return str(prop.get("checkbox", False))
+
+    return str(prop) if prop else None
+
 
 class Tasks(commands.Cog):
     def __init__(self, bot):
@@ -70,12 +123,12 @@ class Tasks(commands.Cog):
             return None
 
 
-    @commands.command(name="task", aliases=["t", "do"])
+    @commands.command(name="task", aliases=["t"])
     async def natural_task(self, ctx, *, query: str = None):
         if not query:
             return await ctx.send("Please provide a task instruction. Example: `!task assign the auth api ticket to Riya`")
             
-        config = get_bot_config()
+        config = get_bot_config(ctx.guild.id)
         
         if not config or not config.notion_api_key or not config.ollama_url:
             return await ctx.send("This server hasn't been configured with API keys. Please check your .env file.")
@@ -84,10 +137,10 @@ class Tasks(commands.Cog):
         
         # We need the property map to do Notion things safely
         prop_map = config.get_property_map()
-        # In a real heavy-load scenario we'd cache this schema resolution, 
-        # but calling it here ensures we always have the exact types.
+
+        # Async + cached schema validation — never blocks the event loop
         async with ctx.typing():
-            schema_res = validate_schema(api_key, config.notion_db_id, prop_map)
+            schema_res = await async_validate_schema(api_key, config.notion_db_id, prop_map)
             
         if not schema_res.valid:
             return await ctx.send(f"Your Notion database schema is invalid or missing properties:\n{schema_res.summary}")
@@ -103,12 +156,8 @@ class Tasks(commands.Cog):
         action = parsed_data.get("action", "create").lower()
         task_data = parsed_data.get("task", {})
         
-        # Phase 5: Assignee Mapping Resolution
-        # Pre-process assignee context using Discord mapped values if an assignee was parsed.
-        # If it resolves to a Notion value, inject it. If not, pass through the raw string
-        # since it might be handled correctly if Notion schema is rich_text. 
+        # Assignee mapping — resolve Discord mentions/names to Notion values
         if "assignee" in task_data and task_data["assignee"]:
-            from functionality.config import resolve_assignee_mapping
             mapped_value = resolve_assignee_mapping(ctx.guild.id, task_data["assignee"])
             if mapped_value:
                 task_data["assignee"] = mapped_value
@@ -143,25 +192,29 @@ class Tasks(commands.Cog):
             
         if res["ok"]:
             page_url = res["data"].get("url", "")
-            await ctx.send(f"✅ Task created successfully!\n{page_url}")
+            await ctx.send(f"Success: Task created!\n{page_url}")
         else:
-            await ctx.send(f"❌ Failed to create task:\n`{res.get('message')}`")
+            await ctx.send(f"Error: Failed to create task:\n`{res.get('message')}`")
 
     async def _handle_update(self, ctx, api_key, db_id, task_data, resolved_schema, action):
         title_query = task_data.get("title")
         if not title_query:
             return await ctx.send(f"I couldn't determine which task to {action}. Please include the task title.")
             
-        # Search for candidates using title
+        # Build search filters from all safe narrowing fields (F3)
+        search_filters = {"title": title_query}
+        for field in ("status", "assignee", "priority"):
+            if task_data.get(field):
+                search_filters[field] = task_data[field]
+
         async with ctx.typing():
-            search_res = await search_tasks(api_key, db_id, {"title": title_query}, resolved_schema)
+            search_res = await search_tasks(api_key, db_id, search_filters, resolved_schema)
             
         if not search_res["ok"]:
-            return await ctx.send(f"❌ Search failed:\n`{search_res.get('message')}`")
+            return await ctx.send(f"Error: Search failed:\n`{search_res.get('message')}`")
             
         results = search_res.get("results", [])
         
-        from functionality.task_resolution import resolve_task_candidates
         status_res, result = resolve_task_candidates(results, title_query)
         
         target_task = None
@@ -182,12 +235,24 @@ class Tasks(commands.Cog):
         update_payload = dict(task_data)
         if action in ["move", "assign", "archive"] and "title" in update_payload:
             update_payload.pop("title")
-            
-        embed = discord.Embed(title=f"Confirm {action.capitalize()}", description="Applying these changes:", color=discord.Color.orange())
-        for k, v in update_payload.items():
-            if v:
-                embed.add_field(name=k.capitalize(), value=str(v), inline=False)
-                
+
+        # True diff preview: show current vs new values (F4)
+        embed = discord.Embed(title=f"Confirm {action.capitalize()}", description="Proposed changes:", color=discord.Color.orange())
+        has_changes = False
+        for key, new_val in update_payload.items():
+            if not new_val:
+                continue
+            current_val = _extract_property_value(target_task, key, resolved_schema)
+            if current_val is not None and current_val != str(new_val):
+                embed.add_field(name=key.capitalize(), value=f"`{current_val}` -> `{new_val}`", inline=False)
+                has_changes = True
+            elif current_val is None:
+                embed.add_field(name=key.capitalize(), value=f"(not set) -> `{new_val}`", inline=False)
+                has_changes = True
+
+        if not has_changes:
+            return await ctx.send("No changes detected between current values and proposed update.")
+
         await ctx.send(embed=embed)
         
         if not await self._confirm_action(ctx, "Proceed with update?"):
@@ -197,24 +262,29 @@ class Tasks(commands.Cog):
             res = await update_task(api_key, target_task["id"], update_payload, resolved_schema)
             
         if res["ok"]:
-            await ctx.send(f"✅ Task updated successfully!\n{res['data'].get('url')}")
+            await ctx.send(f"Success: Task updated!\n{res['data'].get('url')}")
         else:
-            await ctx.send(f"❌ Failed to update task:\n`{res.get('message')}`")
+            await ctx.send(f"Error: Failed to update task:\n`{res.get('message')}`")
 
     async def _handle_archive(self, ctx, api_key, db_id, task_data, resolved_schema, config):
         title_query = task_data.get("title")
         if not title_query:
             return await ctx.send("I couldn't determine which task to archive. Please include the task title.")
-            
+
+        # Build search filters from all safe narrowing fields (F3)
+        search_filters = {"title": title_query}
+        for field in ("status", "assignee", "priority"):
+            if task_data.get(field):
+                search_filters[field] = task_data[field]
+
         async with ctx.typing():
-            search_res = await search_tasks(api_key, db_id, {"title": title_query}, resolved_schema)
+            search_res = await search_tasks(api_key, db_id, search_filters, resolved_schema)
             
         if not search_res["ok"]:
-            return await ctx.send(f"❌ Search failed:\n`{search_res.get('message')}`")
+            return await ctx.send(f"Error: Search failed:\n`{search_res.get('message')}`")
             
         results = search_res.get("results", [])
         
-        from functionality.task_resolution import resolve_task_candidates
         status_res, result = resolve_task_candidates(results, title_query)
         
         target_task = None
@@ -235,9 +305,9 @@ class Tasks(commands.Cog):
             res = await archive_task(api_key, target_task["id"], resolved_schema, config.archive_mode, config.archive_status_value)
             
         if res["ok"]:
-            await ctx.send("✅ Task archived successfully!")
+            await ctx.send("Success: Task archived!")
         else:
-            await ctx.send(f"❌ Failed to archive task:\n`{res.get('message')}`")
+            await ctx.send(f"Error: Failed to archive task:\n`{res.get('message')}`")
 
     async def _handle_search(self, ctx, api_key, db_id, task_data, resolved_schema):
          async with ctx.typing():
@@ -253,7 +323,7 @@ class Tasks(commands.Cog):
              search_res = await search_tasks(api_key, db_id, filters, resolved_schema)
              
          if not search_res["ok"]:
-             return await ctx.send(f"❌ Search failed:\n`{search_res.get('message')}`")
+             return await ctx.send(f"Error: Search failed:\n`{search_res.get('message')}`")
              
          results = search_res.get("results", [])
          if not results:
@@ -284,7 +354,7 @@ class Tasks(commands.Cog):
         Example: `!mapuser @riya Riya Sharma`
         """
         guild_id = ctx.guild.id
-        save_assignee_mapping(guild_id, user.id, notion_value, str(user))
+        save_assignee_mapping(guild_id, user.id, notion_value, user.display_name)
         
         embed = discord.Embed(
             title="User Mapped", 

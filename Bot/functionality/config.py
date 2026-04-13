@@ -1,6 +1,9 @@
 """
-Global Bot configuration and assignee mapping service.
+Bot configuration and assignee mapping service.
+
 Provides access to environment variables and handles database mappings.
+Currently single-tenant (env vars), but the interface accepts guild_id
+to make call sites explicit and future-proof for multi-tenant config.
 """
 
 import os
@@ -38,8 +41,13 @@ class BotConfig:
             "tags": self.task_tags_property,
         }
 
-def get_bot_config() -> BotConfig:
-    """Fetch global configuration from environment variables."""
+def get_bot_config(guild_id=None) -> BotConfig:
+    """Fetch bot configuration for a guild.
+
+    Currently reads from environment variables (single-tenant).
+    The guild_id parameter is accepted for call-site clarity and
+    will be used for DB-backed per-guild config in the future.
+    """
     return BotConfig(
         notion_api_key=os.environ.get("NOTION_API_KEY", ""),
         notion_db_id=os.environ.get("NOTION_DB_ID", ""),
@@ -86,7 +94,12 @@ def resolve_assignee_mapping(guild_id, query_str):
 
 
 def save_assignee_mapping(guild_id, discord_user_id, notion_value, discord_name=None):
-    """Create or update a Discord-to-Notion assignee mapping."""
+    """Create or update a Discord-to-Notion assignee mapping.
+
+    discord_name should be user.display_name (the server nickname or
+    global display name) for stable fallback matching. Do NOT pass
+    str(user) as it includes discriminator formatting that can change.
+    """
     db = SessionLocal()
     try:
         mapping = db.query(models.AssigneeMapping).filter(

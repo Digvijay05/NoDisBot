@@ -5,10 +5,15 @@ Fetches database metadata from Notion and checks that the required
 task properties exist, using the guild's configured property-name mappings.
 """
 
+import asyncio
+import time
 import requests
 
 NOTION_API_VERSION = "2022-06-28"
 REQUEST_TIMEOUT = 10  # seconds
+SCHEMA_CACHE_TTL = 300  # 5 minutes
+
+_schema_cache = {}  # {db_id: (timestamp, SchemaValidationResult)}
 
 
 class SchemaValidationResult:
@@ -23,15 +28,15 @@ class SchemaValidationResult:
 
     @property
     def summary(self):
-        """Human-readable summary for Discord embeds."""
+        """Human-readable summary for Discord embeds (ASCII-safe)."""
         lines = []
         if self.found:
-            lines.append("✅ **Found:** " + ", ".join(self.found))
+            lines.append("Found: " + ", ".join(self.found))
         if self.missing:
-            lines.append("❌ **Missing:** " + ", ".join(self.missing))
+            lines.append("Missing: " + ", ".join(self.missing))
         if self.warnings:
             for w in self.warnings:
-                lines.append(f"⚠️ {w}")
+                lines.append(f"Warning: {w}")
         return "\n".join(lines) if lines else "No properties checked."
 
 
@@ -122,3 +127,21 @@ def validate_schema(api_key, db_id, property_map=None):
 
     valid = len(missing) == 0
     return SchemaValidationResult(valid=valid, missing=missing, found=found, warnings=warnings, resolved_schema=resolved_schema)
+
+
+async def async_validate_schema(api_key, db_id, property_map=None):
+    """Async, cached wrapper around validate_schema.
+
+    Uses asyncio.to_thread to avoid blocking the bot event loop,
+    and caches results per db_id for SCHEMA_CACHE_TTL seconds.
+    """
+    now = time.monotonic()
+    if db_id in _schema_cache:
+        cached_at, cached_result = _schema_cache[db_id]
+        if now - cached_at < SCHEMA_CACHE_TTL:
+            return cached_result
+
+    result = await asyncio.to_thread(validate_schema, api_key, db_id, property_map)
+    _schema_cache[db_id] = (now, result)
+    return result
+

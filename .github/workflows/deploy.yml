@@ -65,6 +65,7 @@ jobs:
         if: always()
         with:
           sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
 
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@v0.35.0
@@ -80,6 +81,7 @@ jobs:
         if: always()
         with:
           sarif_file: trivy-image.sarif
+          category: trivy-docker-image
 
       - name: Trigger Render deploy
         if: github.ref == 'refs/heads/main'

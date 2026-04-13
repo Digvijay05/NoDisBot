@@ -1,15 +1,11 @@
 services:
-  - type: worker
+  - type: web
     name: notion-discord-bot
     runtime: docker
-    plan: starter
+    plan: free
     autoDeploy: true
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    disk:
-      name: bot-data
-      mountPath: /app/data
-      sizeGB: 1
     envVars:
       - key: PYTHONDONTWRITEBYTECODE
         value: "1"

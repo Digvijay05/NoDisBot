@@ -152,6 +152,11 @@ async def changePrefix(ctx):
 bot.guild_info = utils.getGuildInfo()
 # loading all the cogs
 load_cogs()
+
+# Start health-check server for Render free-tier Web Service
+from keep_alive import keep_alive
+keep_alive()
+
 try:
     bot.run(token)
 except Exception as e:

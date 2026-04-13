@@ -1,15 +1,13 @@
-version: '3.4'
+version: '3.8'
 
 services:
-  notiondiscordbot:
-    image: notiondiscordbot
+  nodisbot:
+    image: nodisbot:local
     build:
       context: .
       dockerfile: ./Dockerfile
     volumes:
-      - ./database:/Bot/database
-    environment:
-      - TOKEN=your-discord-bot-token
-      - PREFIX=*
-      - SECRET_KEY=<encryption key>
+      - ./data:/app/data
+    env_file:
+      - .env
     restart: always

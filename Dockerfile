@@ -43,7 +43,5 @@ RUN chmod 755 /app/scripts/render-entrypoint.sh \
 
 USER appuser
 
-EXPOSE 10000
-
 ENTRYPOINT ["/app/scripts/render-entrypoint.sh"]
 CMD ["python", "-u", "Bot/bot.py"]

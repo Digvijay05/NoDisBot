@@ -10,4 +10,10 @@ services:
       - ./data:/app/data
     env_file:
       - .env
+    environment:
+      DATA_DIR: /app/data
+      OLLAMA_URL: https://ollama.com
+      OLLAMA_MODEL: deepseek-v3.1:671b-cloud
+      OLLAMA_API: ${OLLAMA_API}
+      OLLAMA_API_KEY: ${OLLAMA_API}
     restart: always

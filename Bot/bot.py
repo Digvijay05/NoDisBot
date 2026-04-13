@@ -10,6 +10,11 @@ except ImportError:  # pragma: no cover - script execution fallback
     import models
     import migrate
 
+try:
+    from Bot.functionality.config import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
+except ImportError:  # pragma: no cover - script execution fallback
+    from functionality.config import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL
+
 # database setup
 db = SessionLocal()
 
@@ -31,10 +36,14 @@ if not notion_db_id:
     print("CRITICAL: No NOTION_DB_ID found in environment. Exiting...")
     exit(1)
 
-ollama_url = os.environ.get("OLLAMA_URL")
-if not ollama_url:
-    print("CRITICAL: No OLLAMA_URL found in environment. Exiting...")
+ollama_api_key = os.environ.get("OLLAMA_API") or os.environ.get("OLLAMA_API_KEY")
+if not ollama_api_key:
+    print("CRITICAL: No OLLAMA_API found in environment. Exiting...")
     exit(1)
+
+os.environ.setdefault("OLLAMA_URL", DEFAULT_OLLAMA_URL)
+os.environ.setdefault("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+os.environ.setdefault("OLLAMA_API_KEY", ollama_api_key)
 
 # cogs
 cogs = [

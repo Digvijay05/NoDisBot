@@ -16,11 +16,17 @@ except ImportError:  # pragma: no cover - script execution fallback
     from database import SessionLocal
     import models
 
+
+DEFAULT_OLLAMA_URL = "https://ollama.com"
+DEFAULT_OLLAMA_MODEL = "deepseek-v3.1:671b-cloud"
+
+
 @dataclass
 class BotConfig:
     notion_api_key: str
     notion_db_id: str
     ollama_url: str
+    ollama_api_key: str
     ollama_model: str
     
     # We can hardcode defaults for the schema property names here or expand this if needed.
@@ -56,8 +62,9 @@ def get_bot_config(guild_id=None) -> BotConfig:
     return BotConfig(
         notion_api_key=os.environ.get("NOTION_API_KEY", ""),
         notion_db_id=os.environ.get("NOTION_DB_ID", ""),
-        ollama_url=os.environ.get("OLLAMA_URL", ""),
-        ollama_model=os.environ.get("OLLAMA_MODEL", "llama3"),
+        ollama_url=os.environ.get("OLLAMA_URL", DEFAULT_OLLAMA_URL),
+        ollama_api_key=os.environ.get("OLLAMA_API", os.environ.get("OLLAMA_API_KEY", "")),
+        ollama_model=os.environ.get("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL),
     )
 
 

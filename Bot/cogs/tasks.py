@@ -130,7 +130,7 @@ class Tasks(commands.Cog):
             
         config = get_bot_config(ctx.guild.id)
         
-        if not config or not config.notion_api_key or not config.ollama_url:
+        if not config or not config.notion_api_key or not config.ollama_api_key:
             return await ctx.send("This server hasn't been configured with API keys. Please check your .env file.")
             
         api_key = config.notion_api_key
@@ -148,7 +148,12 @@ class Tasks(commands.Cog):
         resolved_schema = schema_res.resolved_schema
         
         async with ctx.typing():
-            parsed_data, err = await parse_task_request(query, config.ollama_url, config.ollama_model)
+            parsed_data, err = await parse_task_request(
+                query,
+                config.ollama_url,
+                config.ollama_model,
+                config.ollama_api_key,
+            )
             
         if err:
             return await ctx.send(f"Error parsing task: {err}")

@@ -71,7 +71,7 @@ def clean_json_response(raw_text: str) -> str:
         
     return text.strip()
 
-async def parse_task_request(user_input: str, base_url: str, model: str) -> tuple:
+async def parse_task_request(user_input: str, base_url: str, model: str, api_key: str = None) -> tuple:
     """
     Sends natural language input to Ollama and attempts to parse the returned JSON.
     Returns (dict, error_string). If successful, error_string is None.
@@ -86,7 +86,8 @@ async def parse_task_request(user_input: str, base_url: str, model: str) -> tupl
         base_url=base_url,
         model=model,
         system_prompt=SYSTEM_PROMPT,
-        user_prompt=user_prompt
+        user_prompt=user_prompt,
+        api_key=api_key,
     )
     
     if err:

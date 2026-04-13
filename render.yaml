@@ -1,5 +1,5 @@
 services:
-  - type: web
+  - type: worker
     name: notion-discord-bot
     runtime: docker
     plan: free
@@ -14,8 +14,18 @@ services:
       - key: DATA_DIR
         value: /app/data
       - key: PREFIX
-        value: "*"
+        value: "!"
+      - key: OLLAMA_URL
+        value: https://ollama.com
+      - key: OLLAMA_MODEL
+        value: deepseek-v3.1:671b-cloud
       - key: TOKEN
         sync: false
       - key: SECRET_KEY
+        sync: false
+      - key: NOTION_API_KEY
+        sync: false
+      - key: NOTION_DB_ID
+        sync: false
+      - key: OLLAMA_API
         sync: false

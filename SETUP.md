@@ -37,19 +37,28 @@ Required:
 
 - `TOKEN`
 - `SECRET_KEY`
+- `NOTION_API_KEY`
+- `NOTION_DB_ID`
+- `OLLAMA_API`
 
 Optional:
 
 - `PREFIX`
 - `DATA_DIR`
 - `DATABASE_URL`
+- `OLLAMA_URL`
+- `OLLAMA_MODEL`
 
 Recommended local defaults:
 
 ```env
 TOKEN=your-discord-bot-token
 SECRET_KEY=generate-a-stable-random-secret
-PREFIX=*
+NOTION_API_KEY=secret_your_notion_integration_token
+NOTION_DB_ID=your_notion_database_id
+OLLAMA_API=your_ollama_cloud_api_key
+OLLAMA_MODEL=deepseek-v3.1:671b-cloud
+PREFIX=!
 DATA_DIR=./Bot/database
 ```
 
@@ -70,7 +79,11 @@ pip install --upgrade pip
 pip install -r requirements.txt
 $env:TOKEN="your-discord-bot-token"
 $env:SECRET_KEY="generate-a-stable-random-secret"
-$env:PREFIX="*"
+$env:NOTION_API_KEY="secret_your_notion_integration_token"
+$env:NOTION_DB_ID="your_notion_database_id"
+$env:OLLAMA_API="your_ollama_cloud_api_key"
+$env:OLLAMA_MODEL="deepseek-v3.1:671b-cloud"
+$env:PREFIX="!"
 $env:DATA_DIR=".\Bot\database"
 python Bot\bot.py
 ```
@@ -84,7 +97,11 @@ pip install --upgrade pip
 pip install -r requirements.txt
 export TOKEN="your-discord-bot-token"
 export SECRET_KEY="generate-a-stable-random-secret"
-export PREFIX="*"
+export NOTION_API_KEY="secret_your_notion_integration_token"
+export NOTION_DB_ID="your_notion_database_id"
+export OLLAMA_API="your_ollama_cloud_api_key"
+export OLLAMA_MODEL="deepseek-v3.1:671b-cloud"
+export PREFIX="!"
 export DATA_DIR="./Bot/database"
 python Bot/bot.py
 ```
@@ -156,13 +173,40 @@ Build locally:
 docker build -t nodisbot:local .
 ```
 
-Run locally:
+Run locally with Docker Compose:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build -d
+docker compose logs -f nodisbot
+```
+
+Optional: verify the Ollama Cloud token from your shell before booting the bot:
+
+```powershell
+$headers = @{
+  Authorization = "Bearer $env:OLLAMA_API"
+  "Content-Type" = "application/json"
+}
+$body = @{
+  model = "deepseek-v3.1:671b-cloud"
+  messages = @(@{ role = "user"; content = "Reply with the word ok." })
+  stream = $false
+} | ConvertTo-Json -Depth 4
+Invoke-RestMethod -Method Post -Uri "https://ollama.com/api/chat" -Headers $headers -Body $body
+```
+
+Run locally without Compose:
 
 ```powershell
 docker run --rm `
   -e TOKEN=your-discord-bot-token `
   -e SECRET_KEY=generate-a-stable-random-secret `
-  -e PREFIX=* `
+  -e NOTION_API_KEY=secret_your_notion_integration_token `
+  -e NOTION_DB_ID=your_notion_database_id `
+  -e OLLAMA_API=your_ollama_cloud_api_key `
+  -e OLLAMA_MODEL=deepseek-v3.1:671b-cloud `
+  -e PREFIX=! `
   -e DATA_DIR=/app/data `
   nodisbot:local
 ```
@@ -179,7 +223,7 @@ Expected result:
 
 1. Confirm `render.yaml` exists
 2. Confirm `Dockerfile` builds successfully
-3. Confirm `TOKEN` and `SECRET_KEY` are set in Render
+3. Confirm `TOKEN`, `SECRET_KEY`, `NOTION_API_KEY`, `NOTION_DB_ID`, and `OLLAMA_API` are set in Render
 4. Confirm persistent disk is mounted at `/app/data`
 5. Confirm `main` branch contains the latest deployment config
 
@@ -193,11 +237,16 @@ Expected result:
 
 - `TOKEN`
 - `SECRET_KEY`
+- `NOTION_API_KEY`
+- `NOTION_DB_ID`
+- `OLLAMA_API`
 
 ### Safe Render defaults
 
 - `DATA_DIR=/app/data`
-- `PREFIX=*`
+- `PREFIX=!`
+- `OLLAMA_URL=https://ollama.com`
+- `OLLAMA_MODEL=deepseek-v3.1:671b-cloud`
 - auto-deploy enabled
 
 ## 9. GitHub Push Procedure
@@ -308,4 +357,3 @@ When making improvements, prefer this order:
 - add smoke tests for startup and env validation
 - add a migration path to Render Postgres
 - add branch protection and CI enforcement on `main`
-

@@ -4,12 +4,18 @@ Async HTTP client for interacting with a configured Ollama instance.
 
 import aiohttp
 import asyncio
-import json
 
 DEFAULT_TIMEOUT = 30  # seconds
 
 
-async def generate_chat_completion(base_url: str, model: str, system_prompt: str, user_prompt: str):
+def _build_endpoint(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/api"):
+        return f"{normalized}/chat"
+    return f"{normalized}/api/chat"
+
+
+async def generate_chat_completion(base_url: str, model: str, system_prompt: str, user_prompt: str, api_key: str = None):
     """
     Call Ollama's /api/chat endpoint to generate a response.
     
@@ -17,9 +23,7 @@ async def generate_chat_completion(base_url: str, model: str, system_prompt: str
     json format on the Ollama endpoint if supported (Ollama > 0.1.30 supports this).
     """
     
-    # Ensure URL doesn't have trailing slash
-    base_url = base_url.rstrip("/")
-    endpoint = f"{base_url}/api/chat"
+    endpoint = _build_endpoint(base_url)
     
     payload = {
         "model": model,
@@ -33,8 +37,12 @@ async def generate_chat_completion(base_url: str, model: str, system_prompt: str
     
     try:
         timeout = aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT)
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(endpoint, json=payload) as response:
+            async with session.post(endpoint, json=payload, headers=headers) as response:
                 if response.status != 200:
                     text = await response.text()
                     return None, f"Ollama HTTP {response.status}: {text}"
@@ -50,6 +58,6 @@ async def generate_chat_completion(base_url: str, model: str, system_prompt: str
     except asyncio.TimeoutError:
         return None, f"Ollama request timed out after {DEFAULT_TIMEOUT} seconds."
     except aiohttp.ClientConnectorError:
-        return None, f"Could not connect to Ollama at {base_url}. Is it running?"
+        return None, f"Could not connect to Ollama at {base_url}. If you are using Ollama Cloud, verify the host and API key."
     except Exception as e:
         return None, f"Unexpected error calling Ollama: {str(e)}"

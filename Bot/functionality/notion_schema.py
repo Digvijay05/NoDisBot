@@ -132,7 +132,7 @@ def validate_schema(api_key, db_id, property_map=None):
 async def async_validate_schema(api_key, db_id, property_map=None):
     """Async, cached wrapper around validate_schema.
 
-    Uses asyncio.to_thread to avoid blocking the bot event loop,
+    Uses run_in_executor to avoid blocking the bot event loop,
     and caches results per db_id for SCHEMA_CACHE_TTL seconds.
     """
     now = time.monotonic()
@@ -141,7 +141,7 @@ async def async_validate_schema(api_key, db_id, property_map=None):
         if now - cached_at < SCHEMA_CACHE_TTL:
             return cached_result
 
-    result = await asyncio.to_thread(validate_schema, api_key, db_id, property_map)
+    result = await asyncio.get_running_loop().run_in_executor(None, validate_schema, api_key, db_id, property_map)
     _schema_cache[db_id] = (now, result)
     return result
 

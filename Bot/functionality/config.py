@@ -8,8 +8,13 @@ to make call sites explicit and future-proof for multi-tenant config.
 
 import os
 from dataclasses import dataclass
-from database import SessionLocal
-import models
+
+try:
+    from Bot.database import SessionLocal
+    from Bot import models
+except ImportError:  # pragma: no cover - script execution fallback
+    from database import SessionLocal
+    import models
 
 @dataclass
 class BotConfig:

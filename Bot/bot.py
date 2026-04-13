@@ -1,9 +1,14 @@
 import os
 import discord
 from discord.ext import commands
-from database import SessionLocal
-import models
-import migrate
+
+try:
+    from Bot.database import SessionLocal
+    from Bot import models, migrate
+except ImportError:  # pragma: no cover - script execution fallback
+    from database import SessionLocal
+    import models
+    import migrate
 
 # database setup
 db = SessionLocal()
@@ -53,10 +58,15 @@ load_cogs()
 
 # Start health-check server for Render free-tier Web Service
 try:
-    from keep_alive import keep_alive
-    keep_alive()
+    from Bot.keep_alive import keep_alive
 except ImportError:
-    pass
+    try:
+        from keep_alive import keep_alive
+    except ImportError:
+        keep_alive = None
+
+if keep_alive:
+    keep_alive()
 
 try:
     bot.run(token)

@@ -7,8 +7,12 @@ Handles two cases:
    SQLite raises OperationalError if a column already exists, which we catch and skip.
 """
 
-from database import SessionLocal, engine
-import models
+try:
+    from Bot.database import SessionLocal, engine
+    from Bot import models
+except ImportError:  # pragma: no cover - script execution fallback
+    from database import SessionLocal, engine
+    import models
 
 
 # New columns added to the 'clients' table in Phase 1.

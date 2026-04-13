@@ -1,6 +1,11 @@
 import os
+
 from sqlalchemy import Column, Integer, String
-from database import Base
+
+try:
+    from Bot.database import Base
+except ImportError:  # pragma: no cover - script execution fallback
+    from database import Base
 
 class AssigneeMapping(Base):
     """Maps a Discord user to a Notion assignee value for a specific guild."""

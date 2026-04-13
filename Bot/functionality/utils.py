@@ -1,10 +1,16 @@
 import requests
 from bs4 import BeautifulSoup
-from database import SessionLocal, engine
-import models
 import json
 import validators
-from functionality.security import *
+
+try:
+    from Bot.database import SessionLocal, engine
+    from Bot import models
+    from Bot.functionality.security import *
+except ImportError:  # pragma: no cover - script execution fallback
+    from database import SessionLocal, engine
+    import models
+    from functionality.security import *
 db = SessionLocal()
 
 

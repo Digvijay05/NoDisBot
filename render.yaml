@@ -3,7 +3,7 @@ services:
     name: notion-discord-bot
     runtime: docker
     plan: free
-    autoDeploy: true
+    autoDeploy: false
     dockerfilePath: ./Dockerfile
     dockerContext: .
     envVars:

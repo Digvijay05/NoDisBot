@@ -84,7 +84,7 @@ jobs:
           category: trivy-docker-image
 
       - name: Trigger Render deploy
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch'
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |

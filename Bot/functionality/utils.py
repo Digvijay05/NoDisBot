@@ -214,8 +214,6 @@ def getGuildInfo():
                 guild.tag,
                 guild.prefix
             )
-            print(obj.notion_api_key)
-            print(obj.notion_db_id)
             data[str(guild.guild_id)] = obj
         else:
             # database rescue 
@@ -224,7 +222,6 @@ def getGuildInfo():
             fixDatabase()
             return getGuildInfo()
             
-    print(data)
     return data
 
 def doesItExist(link, api_key, db_id):

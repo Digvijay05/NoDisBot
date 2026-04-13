@@ -16,9 +16,12 @@ def _default_sqlite_url():
 
 SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", _default_sqlite_url())
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URI, connect_args={"check_same_thread": False}
-)
+# Only pass check_same_thread for SQLite engines
+_connect_args = {}
+if SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
+    _connect_args["check_same_thread"] = False
+
+engine = create_engine(SQLALCHEMY_DATABASE_URI, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

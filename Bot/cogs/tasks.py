@@ -2,7 +2,7 @@ import asyncio
 import discord
 from discord.ext import commands
 
-from functionality.config import get_guild_config, decrypt_secret
+from functionality.config import get_bot_config, save_assignee_mapping
 from functionality.notion_schema import validate_schema
 from functionality.notion_tasks import create_task, update_task, search_tasks, archive_task
 from functionality.task_parser import parse_task_request
@@ -75,13 +75,12 @@ class Tasks(commands.Cog):
         if not query:
             return await ctx.send("Please provide a task instruction. Example: `!task assign the auth api ticket to Riya`")
             
-        guild_id = str(ctx.guild.id)
-        config = get_guild_config(guild_id)
+        config = get_bot_config()
         
         if not config or not config.notion_api_key or not config.ollama_url:
-            return await ctx.send("This server hasn't been configured for tasks yet. An admin must run `*tasksetup`.")
+            return await ctx.send("This server hasn't been configured with API keys. Please check your .env file.")
             
-        api_key = decrypt_secret(config.notion_api_key)
+        api_key = config.notion_api_key
         
         # We need the property map to do Notion things safely
         prop_map = config.get_property_map()
@@ -277,6 +276,22 @@ class Tasks(commands.Cog):
              embed.set_footer(text=f"Showing top 5 of {len(results)} results")
              
          await ctx.send(embed=embed)
+
+    @commands.has_permissions(administrator=True)
+    @commands.command(name="mapuser")
+    async def mapuser(self, ctx, user: discord.Member, *, notion_value: str):
+        """Maps a Discord user to a Notion assignee value.
+        Example: `!mapuser @riya Riya Sharma`
+        """
+        guild_id = ctx.guild.id
+        save_assignee_mapping(guild_id, user.id, notion_value, str(user))
+        
+        embed = discord.Embed(
+            title="User Mapped", 
+            description=f"Discord user {user.mention} has been mapped to Notion assignee: **{notion_value}**",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
 
 
 def setup(bot):

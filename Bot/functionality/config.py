@@ -1,89 +1,51 @@
 """
-Guild configuration and assignee mapping service.
-Provides access to database models and handles secret encryption/decryption.
+Global Bot configuration and assignee mapping service.
+Provides access to environment variables and handles database mappings.
 """
 
+import os
+from dataclasses import dataclass
 from database import SessionLocal
 import models
-from functionality import security
 
-
-def get_guild_config(guild_id):
-    """Fetch the Clients config for a guild.
+@dataclass
+class BotConfig:
+    notion_api_key: str
+    notion_db_id: str
+    ollama_url: str
+    ollama_model: str
     
-    API keys and DB IDs are returned decrypted if present.
-    """
-    db = SessionLocal()
-    try:
-        guild = db.query(models.Clients).filter(models.Clients.guild_id == guild_id).first()
-        if not guild:
-            return None
-        
-        # We don't want to modify the DB object in-place and accidentally commit decrypted
-        # values, so we create a detached copy for the caller.
-        return models.Clients(
-            guild_id=guild.guild_id,
-            notion_api_key=security.getKey(guild.notion_api_key) if guild.notion_api_key else None,
-            notion_db_id=security.getKey(guild.notion_db_id) if guild.notion_db_id else None,
-            tag=guild.tag,
-            prefix=guild.prefix,
-            ollama_base_url=guild.ollama_base_url,
-            ollama_model=guild.ollama_model,
-            task_title_property=guild.task_title_property,
-            task_status_property=guild.task_status_property,
-            task_assignee_property=guild.task_assignee_property,
-            task_description_property=guild.task_description_property,
-            task_priority_property=guild.task_priority_property,
-            task_due_date_property=guild.task_due_date_property,
-            task_tags_property=guild.task_tags_property,
-            archive_mode=guild.archive_mode,
-        )
-    finally:
-        db.close()
+    # We can hardcode defaults for the schema property names here or expand this if needed.
+    # The existing codebase checks for these when interacting with Notion.
+    task_title_property: str = "Task"
+    task_status_property: str = "Status"
+    task_assignee_property: str = "Assignee"
+    task_description_property: str = "Description"
+    task_priority_property: str = "Priority"
+    task_due_date_property: str = "Due Date"
+    task_tags_property: str = "Tags"
+    archive_mode: str = "checkbox"
+    archive_status_value: str = "Done"
 
+    def get_property_map(self):
+        return {
+            "title": self.task_title_property,
+            "status": self.task_status_property,
+            "assignee": self.task_assignee_property,
+            "description": self.task_description_property,
+            "priority": self.task_priority_property,
+            "due_date": self.task_due_date_property,
+            "tags": self.task_tags_property,
+        }
 
-def save_guild_config(guild_id, **kwargs):
-    """Create or update guild config.
-    
-    If notion_api_key or notion_db_id are provided in kwargs,
-    they will be encrypted before saving.
-    """
-    db = SessionLocal()
-    try:
-        guild = db.query(models.Clients).filter(models.Clients.guild_id == guild_id).first()
-        
-        # Encrypt secrets if they were provided
-        raw_api_key = kwargs.get("notion_api_key")
-        raw_db_id = kwargs.get("notion_db_id")
-        
-        if raw_api_key is not None:
-            kwargs["notion_api_key"] = security.encrypt(raw_api_key)
-        if raw_db_id is not None:
-            kwargs["notion_db_id"] = security.encrypt(raw_db_id)
-            
-        if not guild:
-            # Pop keys if we don't have them but need to satisfy __init__ defaults? 
-            # Actually, the models.Clients init expects positional args.
-            
-            # Fetch default values for what's missing so we can construct models.Clients properly.
-            # Using kwargs or defaults.
-            new_client = models.Clients(
-                guild_id=guild_id,
-                notion_api_key=kwargs.get("notion_api_key", ""),
-                notion_db_id=kwargs.get("notion_db_id", ""),
-            )
-            for k, v in kwargs.items():
-                if hasattr(new_client, k):
-                    setattr(new_client, k, v)
-            db.add(new_client)
-        else:
-            for k, v in kwargs.items():
-                if hasattr(guild, k):
-                    setattr(guild, k, v)
-                    
-        db.commit()
-    finally:
-        db.close()
+def get_bot_config() -> BotConfig:
+    """Fetch global configuration from environment variables."""
+    return BotConfig(
+        notion_api_key=os.environ.get("NOTION_API_KEY", ""),
+        notion_db_id=os.environ.get("NOTION_DB_ID", ""),
+        ollama_url=os.environ.get("OLLAMA_URL", ""),
+        ollama_model=os.environ.get("OLLAMA_MODEL", "llama3"),
+    )
 
 
 def get_assignee_mapping(guild_id, discord_user_id):

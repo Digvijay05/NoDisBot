@@ -1,13 +1,8 @@
-import asyncio
+import os
 import discord
 from discord.ext import commands
-from functionality import setupBot, utils
-import os
-from database import SessionLocal, engine
+from database import SessionLocal
 import models
-import json
-import functionality.utils as utils
-import functionality.security as security
 import migrate
 
 # database setup
@@ -15,78 +10,53 @@ db = SessionLocal()
 
 migrate.run_migrations()
 
-# prefix data
-prefix = ""
-prefix_data = {}
-
-# cogs
-cogs = [
-    "cogs.add",
-    "cogs.search",
-    "cogs.delete",
-    "cogs.upload",
-    "cogs.help",
-    "cogs.admin",
-    "cogs.tasks"
-]
-
-try:
-    prefix = os.environ.get("PREFIX", "*")
-except Exception:
-    prefix = "*"
-
+# Required integrations fail-fast 
 token = os.environ.get("TOKEN")
 if not token:
     print("CRITICAL: No discord TOKEN found in environment. Exiting...")
     exit(1)
-    
-secret_key = os.environ.get("SECRET_KEY")
-if not secret_key:
-    print("CRITICAL: No SECRET_KEY found in environment. Exiting...")
+
+notion_api_key = os.environ.get("NOTION_API_KEY")
+if not notion_api_key:
+    print("CRITICAL: No NOTION_API_KEY found in environment. Exiting...")
     exit(1)
 
-# get prefixes from the database
-def fillPrefix():
-    global prefix_data
-    prefix_data = {}
-    guilds = db.query(models.Clients).all()
-    for guild in guilds:
-        prefix_data[str(guild.guild_id)] = guild.prefix
+notion_db_id = os.environ.get("NOTION_DB_ID")
+if not notion_db_id:
+    print("CRITICAL: No NOTION_DB_ID found in environment. Exiting...")
+    exit(1)
 
+ollama_url = os.environ.get("OLLAMA_URL")
+if not ollama_url:
+    print("CRITICAL: No OLLAMA_URL found in environment. Exiting...")
+    exit(1)
+
+# cogs
+cogs = [
+    "cogs.tasks"
+]
 
 # cog loading reloading
-def reload_cogs():
-    for cog in cogs:
-        bot.reload_extension(cog)
-
-
 def load_cogs():
     for cog in cogs:
         bot.load_extension(cog)
 
+COMMAND_PREFIX = "!"
 
-# get prefix of the guild that triggered bot
 def get_prefix(client, message):
-    global prefix_data
-    try:
-        return prefix_data[str(message.guild.id)]
-    except KeyError:
-        return "*"
+    return COMMAND_PREFIX
 
-fillPrefix()
+bot = commands.Bot(command_prefix=get_prefix, help_command=None)
 
-bot = commands.Bot(command_prefix=(get_prefix), help_command=None)
-
-
-
-# storing guild info in an attribute of bot so that all cogs can access
-bot.guild_info = utils.getGuildInfo()
 # loading all the cogs
 load_cogs()
 
 # Start health-check server for Render free-tier Web Service
-from keep_alive import keep_alive
-keep_alive()
+try:
+    from keep_alive import keep_alive
+    keep_alive()
+except ImportError:
+    pass
 
 try:
     bot.run(token)
